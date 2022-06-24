@@ -1,20 +1,18 @@
 package com.example.shuffle.controller;
 
-import com.example.shuffle.playlist.GetPlaylistsRequest;
-import com.example.shuffle.playlist.GetPlaylistsResponse;
-import com.example.shuffle.playlist.PlaylistShuffleResponse;
-import com.example.shuffle.playlist.ShuffleRequest;
+import com.example.shuffle.playlist.*;
+import com.example.shuffle.track.TrackSupport;
 import com.google.gson.JsonArray;
 import org.apache.hc.core5.http.ParseException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.web.bind.annotation.*;
 import se.michaelthelin.spotify.SpotifyApi;
 import se.michaelthelin.spotify.exceptions.SpotifyWebApiException;
 import se.michaelthelin.spotify.model_objects.IPlaylistItem;
 import se.michaelthelin.spotify.model_objects.special.SnapshotResult;
-import se.michaelthelin.spotify.model_objects.specification.Paging;
-import se.michaelthelin.spotify.model_objects.specification.Playlist;
-import se.michaelthelin.spotify.model_objects.specification.PlaylistSimplified;
-import se.michaelthelin.spotify.model_objects.specification.PlaylistTrack;
+import se.michaelthelin.spotify.model_objects.specification.*;
+import se.michaelthelin.spotify.requests.data.library.GetUsersSavedTracksRequest;
 import se.michaelthelin.spotify.requests.data.playlists.AddItemsToPlaylistRequest;
 import se.michaelthelin.spotify.requests.data.playlists.CreatePlaylistRequest;
 import se.michaelthelin.spotify.requests.data.playlists.GetListOfCurrentUsersPlaylistsRequest;
@@ -28,60 +26,34 @@ import java.util.*;
 @RequestMapping("/playlist")
 public class PlaylistController {
 
+    Logger LOG = LoggerFactory.getLogger(PlaylistController.class);
+
     private static final int MAX_TRACKS_IN_ONE_REQUEST = 100;
 
-    @PostMapping(value = "/true-shuffle")
+    @PostMapping(value = "/shuffle")
     public @ResponseBody PlaylistShuffleResponse shuffle(@RequestBody ShuffleRequest shuffleRequest) {
-        SpotifyApi spotifyApi = new SpotifyApi.Builder()
+        SpotifyApi spotifyApiService = new SpotifyApi.Builder()
                 .setAccessToken(shuffleRequest.getSpotifyAccessToken())
                 .build();
 
-        ArrayList<IPlaylistItem> allTracks = new ArrayList<>();
-        try{
-            // Get playlist tracks
-            boolean isMoreTracks = true;
-            GetPlaylistsItemsRequest getPlaylistsItemsRequest = spotifyApi
-                    .getPlaylistsItems(shuffleRequest.getPlaylistId())
-                    .offset(0)
-                    .limit(50)
-                    .build();
-            while (isMoreTracks){
-                final Paging<PlaylistTrack> playlistTrackPaging = getPlaylistsItemsRequest.execute();
-                ArrayList<PlaylistTrack> currentTracks = new ArrayList<>(Arrays.asList(playlistTrackPaging.getItems()));
-                // Store track information
-                currentTracks.forEach(trackEntry -> {
-                    allTracks.add(trackEntry.getTrack());
-                });
+        ArrayList<IPlaylistItem> allTracks;
+        if (shuffleRequest.isUseLikedTracks()){
+            allTracks = TrackSupport.getAllLikedTracks(spotifyApiService);
+        } else {
+            allTracks = PlaylistSupport.getAllTracksFromPlaylist(spotifyApiService, shuffleRequest);
+        }
 
-                if (playlistTrackPaging.getNext() == null){
-                    isMoreTracks = false;
-                } else {
-                    // Get next page of tracks
-                    getPlaylistsItemsRequest = spotifyApi
-                            .getPlaylistsItems(shuffleRequest.getPlaylistId())
-                            .offset(playlistTrackPaging.getOffset() + 50)
-                            .limit(50)
-                            .build();
-                }
-            }
-        } catch (ParseException | SpotifyWebApiException | IOException e) {
-            System.out.println("Error: " + e.getMessage());
+        if (allTracks == null){
             return new PlaylistShuffleResponse("Error");
         }
 
-        // Put into list? -> Randomise -> Create new playlist -> Add in groups of 100 tracks
+        // Randomise order
         Collections.shuffle(allTracks);
 
-        CreatePlaylistRequest createPlaylistRequest = spotifyApi.createPlaylist(shuffleRequest.getUserId(), "True Shuffled Playlist")
-            .collaborative(false)
-            .public_(false)
-            .description("True Shuffle")
-            .build();
-        final Playlist newShuffledPlaylist;
-        try {
-            newShuffledPlaylist = createPlaylistRequest.execute();
-        } catch (ParseException | SpotifyWebApiException | IOException e) {
-            e.printStackTrace();
+        // Create new playlist
+        // TODO Handle shuffleRequest.isMakeNewPlaylist
+        final Playlist newPlaylist = createNewPlaylist(spotifyApiService, shuffleRequest.getUserId(), "True Shuffled Playlist");
+        if (newPlaylist == null){
             return new PlaylistShuffleResponse("Error");
         }
 
@@ -102,14 +74,14 @@ public class PlaylistController {
             }
 
             numOfCalls++;
-            addItemsToPlaylistRequest = spotifyApi
-                    .addItemsToPlaylist(newShuffledPlaylist.getId(), trackUris)
+            addItemsToPlaylistRequest = spotifyApiService
+                    .addItemsToPlaylist(newPlaylist.getId(), trackUris)
                     .build();
             try {
                 final SnapshotResult snapshotResult = addItemsToPlaylistRequest.execute();
-                System.out.println("Snapshot ID: " + snapshotResult.getSnapshotId());
+                LOG.info("Snapshot ID: " + snapshotResult.getSnapshotId());
             } catch (IOException | SpotifyWebApiException | ParseException e) {
-                System.out.println("Error: " + e.getMessage());
+                LOG.info(e.getMessage());
                 return new PlaylistShuffleResponse("Error");
             }
         }
@@ -119,20 +91,33 @@ public class PlaylistController {
 
     @PostMapping(value = "/my-playlists")
     public @ResponseBody GetPlaylistsResponse getPlaylists(@RequestBody GetPlaylistsRequest getPlaylistsRequest) {
-        SpotifyApi spotifyApi = new SpotifyApi.Builder()
-                .setAccessToken(getPlaylistsRequest.getSpotifyAccessToken())
-                .build();
-        GetListOfCurrentUsersPlaylistsRequest getListOfCurrentUsersPlaylistsRequest = spotifyApi
+        SpotifyApi spotifyApiService = new SpotifyApi.Builder()
+            .setAccessToken(getPlaylistsRequest.getSpotifyAccessToken())
+            .build();
+        GetListOfCurrentUsersPlaylistsRequest getListOfCurrentUsersPlaylistsRequest = spotifyApiService
             .getListOfCurrentUsersPlaylists()
             .limit(50)
             .build();
         try {
             final Paging<PlaylistSimplified> playlistSimplifiedPaging = getListOfCurrentUsersPlaylistsRequest.execute();
-
-            System.out.println("Response: " + playlistSimplifiedPaging);
             return new GetPlaylistsResponse("Success", playlistSimplifiedPaging.getItems());
         } catch (IOException | SpotifyWebApiException | ParseException e) {
+            LOG.info(e.getMessage());
             return new GetPlaylistsResponse("Error", null);
+        }
+    }
+
+    private Playlist createNewPlaylist(SpotifyApi spotifyApiService, String userId, String playlistName){
+        CreatePlaylistRequest createPlaylistRequest = spotifyApiService.createPlaylist(userId, playlistName)
+                .collaborative(false)
+                .public_(false)
+                .description("True Shuffle")
+                .build();
+        try {
+            return createPlaylistRequest.execute();
+        } catch (ParseException | SpotifyWebApiException | IOException e) {
+            e.printStackTrace();
+            return null;
         }
     }
 }

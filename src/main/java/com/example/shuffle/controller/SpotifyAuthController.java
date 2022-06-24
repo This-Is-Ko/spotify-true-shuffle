@@ -29,7 +29,7 @@ public class SpotifyAuthController {
     @GetMapping(value = "/auth-login")
     public @ResponseBody AuthCodeResponse generateSpotifyLoginUri() {
         AuthorizationCodeUriRequest authorizationCodeUriRequest = spotifyApi.authorizationCodeUri()
-                .scope("playlist-modify-private,playlist-modify-public,playlist-read-private,playlist-read-collaborative")
+                .scope("playlist-modify-private,playlist-modify-public,playlist-read-private,playlist-read-collaborative,user-library-read")
                 .state(RandomStringUtils.randomAlphanumeric(16))
                 .build();
 
