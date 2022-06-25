@@ -6,23 +6,28 @@ import com.google.gson.JsonArray;
 import org.apache.hc.core5.http.ParseException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 import se.michaelthelin.spotify.SpotifyApi;
 import se.michaelthelin.spotify.exceptions.SpotifyWebApiException;
+import se.michaelthelin.spotify.exceptions.detailed.UnauthorizedException;
 import se.michaelthelin.spotify.model_objects.IPlaylistItem;
 import se.michaelthelin.spotify.model_objects.special.SnapshotResult;
-import se.michaelthelin.spotify.model_objects.specification.*;
-import se.michaelthelin.spotify.requests.data.library.GetUsersSavedTracksRequest;
+import se.michaelthelin.spotify.model_objects.specification.Paging;
+import se.michaelthelin.spotify.model_objects.specification.Playlist;
+import se.michaelthelin.spotify.model_objects.specification.PlaylistSimplified;
 import se.michaelthelin.spotify.requests.data.playlists.AddItemsToPlaylistRequest;
 import se.michaelthelin.spotify.requests.data.playlists.CreatePlaylistRequest;
 import se.michaelthelin.spotify.requests.data.playlists.GetListOfCurrentUsersPlaylistsRequest;
-import se.michaelthelin.spotify.requests.data.playlists.GetPlaylistsItemsRequest;
 
 import java.io.IOException;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collections;
 
 @RestController
 @ResponseBody
+@CrossOrigin(origins = "http://localhost:3000")
 @RequestMapping("/playlist")
 public class PlaylistController {
 
@@ -44,7 +49,7 @@ public class PlaylistController {
         }
 
         if (allTracks == null){
-            return new PlaylistShuffleResponse("Error");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "No tracks found");
         }
 
         // Randomise order
@@ -54,7 +59,7 @@ public class PlaylistController {
         // TODO Handle shuffleRequest.isMakeNewPlaylist
         final Playlist newPlaylist = createNewPlaylist(spotifyApiService, shuffleRequest.getUserId(), "True Shuffled Playlist");
         if (newPlaylist == null){
-            return new PlaylistShuffleResponse("Error");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Creating new playlist failed");
         }
 
         boolean isAddedAllTracks = false;
@@ -82,7 +87,7 @@ public class PlaylistController {
                 LOG.info("Snapshot ID: " + snapshotResult.getSnapshotId());
             } catch (IOException | SpotifyWebApiException | ParseException e) {
                 LOG.info(e.getMessage());
-                return new PlaylistShuffleResponse("Error");
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
             }
         }
 
@@ -101,9 +106,12 @@ public class PlaylistController {
         try {
             final Paging<PlaylistSimplified> playlistSimplifiedPaging = getListOfCurrentUsersPlaylistsRequest.execute();
             return new GetPlaylistsResponse("Success", playlistSimplifiedPaging.getItems());
+        } catch (UnauthorizedException e){
+            LOG.info(e.getMessage());
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, e.getMessage());
         } catch (IOException | SpotifyWebApiException | ParseException e) {
             LOG.info(e.getMessage());
-            return new GetPlaylistsResponse("Error", null);
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
         }
     }
 

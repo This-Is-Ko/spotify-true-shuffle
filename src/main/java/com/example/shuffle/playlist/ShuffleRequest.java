@@ -6,13 +6,15 @@ public class ShuffleRequest {
     private String userId;
     private boolean isMakeNewPlaylist;
     private String spotifyAccessToken;
+    private String spotifyRefreshToken;
 
-    public ShuffleRequest(boolean isUseLikedTracks, String playlistId, String userId, boolean isMakeNewPlaylist, String spotifyAT) {
+    public ShuffleRequest(boolean isUseLikedTracks, String playlistId, String userId, boolean isMakeNewPlaylist, String spotifyAT, String spotifyRefreshToken) {
         this.isUseLikedTracks = isUseLikedTracks;
         this.playlistId = playlistId;
         this.userId = userId;
         this.isMakeNewPlaylist = isMakeNewPlaylist;
         this.spotifyAccessToken = spotifyAT;
+        this.spotifyRefreshToken = spotifyRefreshToken;
     }
 
     public String getPlaylistId() {
@@ -53,5 +55,13 @@ public class ShuffleRequest {
 
     public void setUseLikedTracks(boolean useLikedTracks) {
         isUseLikedTracks = useLikedTracks;
+    }
+
+    public String getSpotifyRefreshToken() {
+        return spotifyRefreshToken;
+    }
+
+    public void setSpotifyRefreshToken(String spotifyRefreshToken) {
+        this.spotifyRefreshToken = spotifyRefreshToken;
     }
 }

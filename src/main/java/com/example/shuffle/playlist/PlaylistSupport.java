@@ -1,6 +1,5 @@
 package com.example.shuffle.playlist;
 
-import com.example.shuffle.controller.PlaylistController;
 import org.apache.hc.core5.http.ParseException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -9,7 +8,6 @@ import se.michaelthelin.spotify.exceptions.SpotifyWebApiException;
 import se.michaelthelin.spotify.model_objects.IPlaylistItem;
 import se.michaelthelin.spotify.model_objects.specification.Paging;
 import se.michaelthelin.spotify.model_objects.specification.PlaylistTrack;
-import se.michaelthelin.spotify.model_objects.specification.Track;
 import se.michaelthelin.spotify.requests.data.playlists.GetPlaylistsItemsRequest;
 
 import java.io.IOException;
@@ -53,6 +51,7 @@ public class PlaylistSupport {
             LOG.info(e.getMessage());
             return null;
         }
+        LOG.debug("Retrieved tracks from playlist");
         return allTracks;
     }
 }

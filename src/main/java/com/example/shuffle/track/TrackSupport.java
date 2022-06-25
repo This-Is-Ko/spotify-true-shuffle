@@ -1,6 +1,5 @@
 package com.example.shuffle.track;
 
-import com.example.shuffle.controller.TracksController;
 import org.apache.hc.core5.http.ParseException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -9,7 +8,6 @@ import se.michaelthelin.spotify.exceptions.SpotifyWebApiException;
 import se.michaelthelin.spotify.model_objects.IPlaylistItem;
 import se.michaelthelin.spotify.model_objects.specification.Paging;
 import se.michaelthelin.spotify.model_objects.specification.SavedTrack;
-import se.michaelthelin.spotify.model_objects.specification.Track;
 import se.michaelthelin.spotify.requests.data.library.GetUsersSavedTracksRequest;
 
 import java.io.IOException;
@@ -50,6 +48,7 @@ public class TrackSupport {
             LOG.info(e.getMessage());
             return null;
         }
+        LOG.debug("Retrieved tracks from liked tracks");
         return allTracks;
     }
 }
