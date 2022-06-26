@@ -3,18 +3,14 @@ package com.example.shuffle.playlist;
 public class ShuffleRequest {
     private boolean isUseLikedTracks;
     private String playlistId;
-    private String userId;
     private boolean isMakeNewPlaylist;
     private String spotifyAccessToken;
-    private String spotifyRefreshToken;
 
-    public ShuffleRequest(boolean isUseLikedTracks, String playlistId, String userId, boolean isMakeNewPlaylist, String spotifyAT, String spotifyRefreshToken) {
+    public ShuffleRequest(boolean isUseLikedTracks, String playlistId, boolean isMakeNewPlaylist, String spotifyAT) {
         this.isUseLikedTracks = isUseLikedTracks;
         this.playlistId = playlistId;
-        this.userId = userId;
         this.isMakeNewPlaylist = isMakeNewPlaylist;
         this.spotifyAccessToken = spotifyAT;
-        this.spotifyRefreshToken = spotifyRefreshToken;
     }
 
     public String getPlaylistId() {
@@ -33,14 +29,6 @@ public class ShuffleRequest {
         isMakeNewPlaylist = makeNewPlaylist;
     }
 
-    public String getUserId() {
-        return userId;
-    }
-
-    public void setUserId(String userId) {
-        this.userId = userId;
-    }
-
     public String getSpotifyAccessToken() {
         return spotifyAccessToken;
     }
@@ -55,13 +43,5 @@ public class ShuffleRequest {
 
     public void setUseLikedTracks(boolean useLikedTracks) {
         isUseLikedTracks = useLikedTracks;
-    }
-
-    public String getSpotifyRefreshToken() {
-        return spotifyRefreshToken;
-    }
-
-    public void setSpotifyRefreshToken(String spotifyRefreshToken) {
-        this.spotifyRefreshToken = spotifyRefreshToken;
     }
 }

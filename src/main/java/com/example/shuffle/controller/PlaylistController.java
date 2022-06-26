@@ -17,9 +17,12 @@ import se.michaelthelin.spotify.model_objects.special.SnapshotResult;
 import se.michaelthelin.spotify.model_objects.specification.Paging;
 import se.michaelthelin.spotify.model_objects.specification.Playlist;
 import se.michaelthelin.spotify.model_objects.specification.PlaylistSimplified;
+import se.michaelthelin.spotify.model_objects.specification.User;
 import se.michaelthelin.spotify.requests.data.playlists.AddItemsToPlaylistRequest;
 import se.michaelthelin.spotify.requests.data.playlists.CreatePlaylistRequest;
 import se.michaelthelin.spotify.requests.data.playlists.GetListOfCurrentUsersPlaylistsRequest;
+import se.michaelthelin.spotify.requests.data.playlists.GetPlaylistRequest;
+import se.michaelthelin.spotify.requests.data.users_profile.GetCurrentUsersProfileRequest;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -55,9 +58,23 @@ public class PlaylistController {
         // Randomise order
         Collections.shuffle(allTracks);
 
+        // Get user id
+        GetCurrentUsersProfileRequest getCurrentUsersProfileRequest = spotifyApiService.getCurrentUsersProfile()
+                .build();
+        User user;
+        try {
+            user = getCurrentUsersProfileRequest.execute();
+        } catch (UnauthorizedException e){
+            LOG.info(e.getMessage());
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, e.getMessage());
+        } catch (IOException | SpotifyWebApiException | ParseException e) {
+            LOG.info(e.getMessage());
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
+        }
+
         // Create new playlist
         // TODO Handle shuffleRequest.isMakeNewPlaylist
-        final Playlist newPlaylist = createNewPlaylist(spotifyApiService, shuffleRequest.getUserId(), "True Shuffled Playlist");
+        final Playlist newPlaylist = createNewPlaylist(spotifyApiService, user.getId(), "True Shuffled Playlist");
         if (newPlaylist == null){
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Creating new playlist failed");
         }
@@ -85,13 +102,16 @@ public class PlaylistController {
             try {
                 final SnapshotResult snapshotResult = addItemsToPlaylistRequest.execute();
                 LOG.info("Snapshot ID: " + snapshotResult.getSnapshotId());
+            } catch (UnauthorizedException e){
+                LOG.info(e.getMessage());
+                throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, e.getMessage());
             } catch (IOException | SpotifyWebApiException | ParseException e) {
                 LOG.info(e.getMessage());
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
             }
         }
 
-        return new PlaylistShuffleResponse("Success");
+        return new PlaylistShuffleResponse("Success", newPlaylist.getExternalUrls().get("spotify"));
     }
 
     @PostMapping(value = "/my-playlists")
@@ -106,6 +126,27 @@ public class PlaylistController {
         try {
             final Paging<PlaylistSimplified> playlistSimplifiedPaging = getListOfCurrentUsersPlaylistsRequest.execute();
             return new GetPlaylistsResponse("Success", playlistSimplifiedPaging.getItems());
+        } catch (UnauthorizedException e){
+            LOG.info(e.getMessage());
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, e.getMessage());
+        } catch (IOException | SpotifyWebApiException | ParseException e) {
+            LOG.info(e.getMessage());
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
+        }
+    }
+
+    @PostMapping(value = "/get-playlist-info")
+    public @ResponseBody GetPlaylistResponse getPlaylistInfo(@RequestBody GetPlaylistInfoRequest getPlaylistInfoRequest) {
+        SpotifyApi spotifyApiService = new SpotifyApi.Builder()
+                .setAccessToken(getPlaylistInfoRequest.getSpotifyAccessToken())
+                .build();
+
+        GetPlaylistRequest getPlaylistRequest = spotifyApiService
+                .getPlaylist(getPlaylistInfoRequest.getPlaylistId())
+                .build();
+        try {
+            Playlist playlist = getPlaylistRequest.execute();
+            return new GetPlaylistResponse("Success", playlist);
         } catch (UnauthorizedException e){
             LOG.info(e.getMessage());
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, e.getMessage());
