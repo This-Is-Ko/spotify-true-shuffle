@@ -25,7 +25,7 @@ import java.net.URI;
 
 @RestController
 @ResponseBody
-@CrossOrigin(origins = "http://localhost:3000")
+@CrossOrigin(origins = {"http://localhost:3000","https://spotify-true-shuffle-react.vercel.app"})
 @RequestMapping("/auth/spotify")
 public class SpotifyAuthController {
 
