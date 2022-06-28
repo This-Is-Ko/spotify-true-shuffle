@@ -30,7 +30,7 @@ import java.util.Collections;
 
 @RestController
 @ResponseBody
-@CrossOrigin(origins = {"http://localhost:3000","https://spotify-true-shuffle-react.vercel.app", "www.notcloud.me"})
+@CrossOrigin(origins = {"http://localhost:3000","https://spotify-true-shuffle-react.vercel.app", "https://www.notcloud.me"})
 @RequestMapping("/playlist")
 public class PlaylistController {
 
