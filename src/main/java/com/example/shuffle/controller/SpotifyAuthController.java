@@ -8,7 +8,6 @@ import org.apache.hc.core5.http.ParseException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
@@ -19,7 +18,6 @@ import se.michaelthelin.spotify.model_objects.credentials.AuthorizationCodeCrede
 import se.michaelthelin.spotify.requests.authorization.authorization_code.AuthorizationCodeRefreshRequest;
 import se.michaelthelin.spotify.requests.authorization.authorization_code.AuthorizationCodeRequest;
 import se.michaelthelin.spotify.requests.authorization.authorization_code.AuthorizationCodeUriRequest;
-import se.michaelthelin.spotify.requests.authorization.authorization_code.pkce.AuthorizationCodePKCERefreshRequest;
 
 import javax.annotation.PostConstruct;
 import java.io.IOException;
@@ -40,6 +38,7 @@ public class SpotifyAuthController {
     // Run after construction of instance so config props can be retrieved
     @PostConstruct
     public void init() {
+        LOG.debug(spotifyConfigProperties.getClientId());
         spotifyApi = new SpotifyApi.Builder()
                 .setClientId(spotifyConfigProperties.getClientId())
                 .setClientSecret(spotifyConfigProperties.getClientSecret())
