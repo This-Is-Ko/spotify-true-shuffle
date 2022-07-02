@@ -18,37 +18,34 @@ public class TrackSupport {
 
     static Logger LOG = LoggerFactory.getLogger(TrackSupport.class);
 
-    public static ArrayList<IPlaylistItem> getAllLikedTracks(SpotifyApi spotifyApiService){
+    public static ArrayList<IPlaylistItem> getAllLikedTracks(SpotifyApi spotifyApiService) throws ParseException, SpotifyWebApiException, IOException {
         ArrayList<IPlaylistItem> allTracks = new ArrayList<>();
         GetUsersSavedTracksRequest getUsersSavedTracksRequest = spotifyApiService.getUsersSavedTracks()
                 .limit(50)
                 .offset(0)
                 .build();
         boolean isMoreTracks = true;
-        try {
-            while (isMoreTracks) {
-                final Paging<SavedTrack> savedTrackPaging = getUsersSavedTracksRequest.execute();
-                ArrayList<SavedTrack> currentTracks = new ArrayList<>(Arrays.asList(savedTrackPaging.getItems()));
-                // Store track information
-                currentTracks.forEach(trackEntry -> {
-                    allTracks.add(trackEntry.getTrack());
-                });
+        while (isMoreTracks) {
+            final Paging<SavedTrack> savedTrackPaging = getUsersSavedTracksRequest.execute();
+            ArrayList<SavedTrack> currentTracks = new ArrayList<>(Arrays.asList(savedTrackPaging.getItems()));
+            // Store track information
+            currentTracks.forEach(trackEntry -> {
+                allTracks.add(trackEntry.getTrack());
+            });
 
-                if (savedTrackPaging.getNext() == null){
-                    isMoreTracks = false;
-                } else {
-                    // Get next page of tracks
-                    getUsersSavedTracksRequest = spotifyApiService.getUsersSavedTracks()
-                            .limit(50)
-                            .offset(savedTrackPaging.getOffset() + 50)
-                            .build();
-                }
+            if (savedTrackPaging.getNext() == null){
+                isMoreTracks = false;
+            } else {
+                // Get next page of tracks
+                getUsersSavedTracksRequest = spotifyApiService.getUsersSavedTracks()
+                        .limit(50)
+                        .offset(savedTrackPaging.getOffset() + 50)
+                        .build();
             }
-        } catch (IOException | SpotifyWebApiException | ParseException e) {
-            LOG.info(e.getMessage());
-            return null;
         }
-        LOG.debug("Retrieved tracks from liked tracks");
+        if (allTracks.size() > 0){
+            LOG.debug("Retrieved tracks from liked tracks");
+        }
         return allTracks;
     }
 }

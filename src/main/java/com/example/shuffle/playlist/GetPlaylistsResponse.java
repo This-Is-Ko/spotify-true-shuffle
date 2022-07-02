@@ -6,9 +6,9 @@ import java.util.ArrayList;
 
 public class GetPlaylistsResponse {
     private String status;
-    private PlaylistSimplified[] allPlaylists;
+    private ArrayList<PlaylistSimplified> allPlaylists;
 
-    public GetPlaylistsResponse(String status, PlaylistSimplified[] allPlaylists) {
+    public GetPlaylistsResponse(String status, ArrayList<PlaylistSimplified> allPlaylists) {
         this.status = status;
         this.allPlaylists = allPlaylists;
     }
@@ -21,11 +21,11 @@ public class GetPlaylistsResponse {
         this.status = status;
     }
 
-    public PlaylistSimplified[] getAllPlaylists() {
+    public ArrayList<PlaylistSimplified> getAllPlaylists() {
         return allPlaylists;
     }
 
-    public void setAllPlaylists(PlaylistSimplified[] allPlaylists) {
+    public void setAllPlaylists(ArrayList<PlaylistSimplified> allPlaylists) {
         this.allPlaylists = allPlaylists;
     }
 }

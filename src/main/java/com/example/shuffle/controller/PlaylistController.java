@@ -3,6 +3,7 @@ package com.example.shuffle.controller;
 import com.example.shuffle.playlist.*;
 import com.example.shuffle.track.TrackSupport;
 import com.google.gson.JsonArray;
+import com.google.gson.JsonParser;
 import org.apache.hc.core5.http.ParseException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -14,14 +15,14 @@ import se.michaelthelin.spotify.exceptions.SpotifyWebApiException;
 import se.michaelthelin.spotify.exceptions.detailed.UnauthorizedException;
 import se.michaelthelin.spotify.model_objects.IPlaylistItem;
 import se.michaelthelin.spotify.model_objects.special.SnapshotResult;
-import se.michaelthelin.spotify.model_objects.specification.Paging;
 import se.michaelthelin.spotify.model_objects.specification.Playlist;
 import se.michaelthelin.spotify.model_objects.specification.PlaylistSimplified;
 import se.michaelthelin.spotify.model_objects.specification.User;
+import se.michaelthelin.spotify.requests.data.follow.legacy.UnfollowPlaylistRequest;
 import se.michaelthelin.spotify.requests.data.playlists.AddItemsToPlaylistRequest;
 import se.michaelthelin.spotify.requests.data.playlists.CreatePlaylistRequest;
-import se.michaelthelin.spotify.requests.data.playlists.GetListOfCurrentUsersPlaylistsRequest;
 import se.michaelthelin.spotify.requests.data.playlists.GetPlaylistRequest;
+import se.michaelthelin.spotify.requests.data.playlists.RemoveItemsFromPlaylistRequest;
 import se.michaelthelin.spotify.requests.data.users_profile.GetCurrentUsersProfileRequest;
 
 import java.io.IOException;
@@ -37,6 +38,7 @@ public class PlaylistController {
     Logger LOG = LoggerFactory.getLogger(PlaylistController.class);
 
     private static final int MAX_TRACKS_IN_ONE_REQUEST = 100;
+    private static final String SHUFFLED_PLAYLIST_PREFIX = "[Shuffled] ";
 
     @PostMapping(value = "/shuffle")
     public @ResponseBody PlaylistShuffleResponse shuffle(@RequestBody ShuffleRequest shuffleRequest) {
@@ -45,13 +47,21 @@ public class PlaylistController {
                 .build();
 
         ArrayList<IPlaylistItem> allTracks;
-        if (shuffleRequest.isUseLikedTracks()){
-            allTracks = TrackSupport.getAllLikedTracks(spotifyApiService);
-        } else {
-            allTracks = PlaylistSupport.getAllTracksFromPlaylist(spotifyApiService, shuffleRequest);
+        try {
+            if (shuffleRequest.isUseLikedTracks()){
+                allTracks = TrackSupport.getAllLikedTracks(spotifyApiService);
+            } else {
+                allTracks = PlaylistSupport.getAllTracksFromPlaylist(spotifyApiService, shuffleRequest);
+            }
+        } catch (UnauthorizedException e){
+            LOG.info(e.getMessage());
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, e.getMessage());
+        } catch (IOException | SpotifyWebApiException | ParseException e) {
+            LOG.info(e.getMessage());
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
         }
 
-        if (allTracks == null){
+        if (allTracks.size() == 0){
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "No tracks found");
         }
 
@@ -72,12 +82,44 @@ public class PlaylistController {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
         }
 
-        // Create new playlist
         // TODO Handle shuffleRequest.isMakeNewPlaylist
-        final Playlist newPlaylist = createNewPlaylist(spotifyApiService, user.getId(), "True Shuffled Playlist");
-        if (newPlaylist == null){
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Creating new playlist failed");
+        final Playlist newPlaylist;
+        try{
+            // Get selected playlist info
+            Playlist playlistInfo = PlaylistSupport.getPlaylistInfo(spotifyApiService, shuffleRequest.getPlaylistId());
+
+            // Search for existing shuffled playlist
+            ArrayList<PlaylistSimplified> allUserPlaylists = PlaylistSupport.getAllUserPlaylists(spotifyApiService);
+            boolean existingShuffledPlaylist = false;
+            PlaylistSimplified existingPlaylist = null;
+            for (int i=0; i < allUserPlaylists.size(); i++){
+                if (allUserPlaylists.get(i).getName().equals(SHUFFLED_PLAYLIST_PREFIX + playlistInfo.getName())){
+                    existingPlaylist = allUserPlaylists.get(i);
+                    existingShuffledPlaylist = true;
+                    break;
+                }
+            }
+            // Reuse existing playlist if exists
+            if (existingShuffledPlaylist){
+                // Unfollow/delete existing playlist
+                UnfollowPlaylistRequest unfollowPlaylistRequest = spotifyApiService
+                        .unfollowPlaylist(user.getId(), existingPlaylist.getId())
+                        .build();
+                String string = unfollowPlaylistRequest.execute();
+                if (!string.equals("null")){
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Deleting existing playlist failed");
+                }
+            }
+            // Create new playlist
+            newPlaylist = createNewPlaylist(spotifyApiService, user.getId(), SHUFFLED_PLAYLIST_PREFIX + playlistInfo.getName());
+            if (newPlaylist == null){
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Creating new playlist failed");
+            }
+        } catch (IOException | SpotifyWebApiException | ParseException e) {
+            LOG.info(e.getMessage());
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
         }
+
 
         boolean isAddedAllTracks = false;
         int numOfCalls = 0;
@@ -119,13 +161,17 @@ public class PlaylistController {
         SpotifyApi spotifyApiService = new SpotifyApi.Builder()
             .setAccessToken(getPlaylistsRequest.getSpotifyAccessToken())
             .build();
-        GetListOfCurrentUsersPlaylistsRequest getListOfCurrentUsersPlaylistsRequest = spotifyApiService
-            .getListOfCurrentUsersPlaylists()
-            .limit(50)
-            .build();
         try {
-            final Paging<PlaylistSimplified> playlistSimplifiedPaging = getListOfCurrentUsersPlaylistsRequest.execute();
-            return new GetPlaylistsResponse("Success", playlistSimplifiedPaging.getItems());
+            // Get all playlists
+            ArrayList<PlaylistSimplified> playlists = PlaylistSupport.getAllUserPlaylists(spotifyApiService);
+            ArrayList<PlaylistSimplified> filteredPlaylists = new ArrayList<>();
+            // Remove shuffled playlists by name
+            for (int i=0; i<playlists.size(); i++){
+                if (!playlists.get(i).getName().startsWith(SHUFFLED_PLAYLIST_PREFIX)){
+                    filteredPlaylists.add(playlists.get(i));
+                }
+            }
+            return new GetPlaylistsResponse("Success", filteredPlaylists);
         } catch (UnauthorizedException e){
             LOG.info(e.getMessage());
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, e.getMessage());
@@ -136,17 +182,17 @@ public class PlaylistController {
     }
 
     @PostMapping(value = "/get-playlist-info")
-    public @ResponseBody GetPlaylistResponse getPlaylistInfo(@RequestBody GetPlaylistInfoRequest getPlaylistInfoRequest) {
+    public @ResponseBody GetPlaylistResponse getPlaylistInfoEndpoint(@RequestBody GetPlaylistInfoRequest getPlaylistInfoRequest) {
         SpotifyApi spotifyApiService = new SpotifyApi.Builder()
                 .setAccessToken(getPlaylistInfoRequest.getSpotifyAccessToken())
                 .build();
 
-        GetPlaylistRequest getPlaylistRequest = spotifyApiService
-                .getPlaylist(getPlaylistInfoRequest.getPlaylistId())
-                .build();
+//        GetPlaylistRequest getPlaylistRequest = spotifyApiService
+//                .getPlaylist(getPlaylistInfoRequest.getPlaylistId())
+//                .build();
         try {
-            Playlist playlist = getPlaylistRequest.execute();
-            return new GetPlaylistResponse("Success", playlist);
+//            Playlist playlist = getPlaylistRequest.execute();
+            return new GetPlaylistResponse("Success", PlaylistSupport.getPlaylistInfo(spotifyApiService, getPlaylistInfoRequest.getPlaylistId()));
         } catch (UnauthorizedException e){
             LOG.info(e.getMessage());
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, e.getMessage());
