@@ -48,4 +48,28 @@ public class TrackSupport {
         }
         return allTracks;
     }
+
+    public static int getNumOfLikedTracks(SpotifyApi spotifyApiService) throws ParseException, SpotifyWebApiException, IOException {
+        int total = 0;
+        GetUsersSavedTracksRequest getUsersSavedTracksRequest = spotifyApiService.getUsersSavedTracks()
+                .limit(50)
+                .offset(0)
+                .build();
+        boolean isMoreTracks = true;
+        while (isMoreTracks) {
+            final Paging<SavedTrack> savedTrackPaging = getUsersSavedTracksRequest.execute();
+            total += savedTrackPaging.getItems().length;
+
+            if (savedTrackPaging.getNext() == null){
+                isMoreTracks = false;
+            } else {
+                // Get next page of tracks
+                getUsersSavedTracksRequest = spotifyApiService.getUsersSavedTracks()
+                        .limit(50)
+                        .offset(savedTrackPaging.getOffset() + 50)
+                        .build();
+            }
+        }
+        return total;
+    }
 }

@@ -15,9 +15,7 @@ import se.michaelthelin.spotify.exceptions.SpotifyWebApiException;
 import se.michaelthelin.spotify.exceptions.detailed.UnauthorizedException;
 import se.michaelthelin.spotify.model_objects.IPlaylistItem;
 import se.michaelthelin.spotify.model_objects.special.SnapshotResult;
-import se.michaelthelin.spotify.model_objects.specification.Playlist;
-import se.michaelthelin.spotify.model_objects.specification.PlaylistSimplified;
-import se.michaelthelin.spotify.model_objects.specification.User;
+import se.michaelthelin.spotify.model_objects.specification.*;
 import se.michaelthelin.spotify.requests.data.follow.legacy.UnfollowPlaylistRequest;
 import se.michaelthelin.spotify.requests.data.playlists.AddItemsToPlaylistRequest;
 import se.michaelthelin.spotify.requests.data.playlists.CreatePlaylistRequest;
@@ -39,6 +37,7 @@ public class PlaylistController {
 
     private static final int MAX_TRACKS_IN_ONE_REQUEST = 100;
     private static final String SHUFFLED_PLAYLIST_PREFIX = "[Shuffled] ";
+    private static final String LIKED_TRACKS_PLAYLIST_ID = "likedTracks";
 
     @PostMapping(value = "/shuffle")
     public @ResponseBody PlaylistShuffleResponse shuffle(@RequestBody ShuffleRequest shuffleRequest) {
@@ -48,7 +47,7 @@ public class PlaylistController {
 
         ArrayList<IPlaylistItem> allTracks;
         try {
-            if (shuffleRequest.isUseLikedTracks()){
+            if (shuffleRequest.getPlaylistId().equals(LIKED_TRACKS_PLAYLIST_ID)){
                 allTracks = TrackSupport.getAllLikedTracks(spotifyApiService);
             } else {
                 allTracks = PlaylistSupport.getAllTracksFromPlaylist(spotifyApiService, shuffleRequest);
@@ -82,26 +81,31 @@ public class PlaylistController {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
         }
 
-        // TODO Handle shuffleRequest.isMakeNewPlaylist
         final Playlist newPlaylist;
         try{
-            // Get selected playlist info
-            Playlist playlistInfo = PlaylistSupport.getPlaylistInfo(spotifyApiService, shuffleRequest.getPlaylistId());
+            String shuffledPlaylistName;
+            if (shuffleRequest.getPlaylistId().equals(LIKED_TRACKS_PLAYLIST_ID)){
+                shuffledPlaylistName = SHUFFLED_PLAYLIST_PREFIX + "Liked Tracks";
+            } else {
+                // Get selected playlist info
+                Playlist playlistInfo = PlaylistSupport.getPlaylistInfo(spotifyApiService, shuffleRequest.getPlaylistId());
+                shuffledPlaylistName = SHUFFLED_PLAYLIST_PREFIX + playlistInfo.getName();
+            }
 
             // Search for existing shuffled playlist
             ArrayList<PlaylistSimplified> allUserPlaylists = PlaylistSupport.getAllUserPlaylists(spotifyApiService);
             boolean existingShuffledPlaylist = false;
             PlaylistSimplified existingPlaylist = null;
             for (int i=0; i < allUserPlaylists.size(); i++){
-                if (allUserPlaylists.get(i).getName().equals(SHUFFLED_PLAYLIST_PREFIX + playlistInfo.getName())){
+                if (allUserPlaylists.get(i).getName().equals(shuffledPlaylistName)){
                     existingPlaylist = allUserPlaylists.get(i);
                     existingShuffledPlaylist = true;
                     break;
                 }
             }
-            // Reuse existing playlist if exists
+
+            // Unfollow/delete existing playlist
             if (existingShuffledPlaylist){
-                // Unfollow/delete existing playlist
                 UnfollowPlaylistRequest unfollowPlaylistRequest = spotifyApiService
                         .unfollowPlaylist(user.getId(), existingPlaylist.getId())
                         .build();
@@ -111,7 +115,7 @@ public class PlaylistController {
                 }
             }
             // Create new playlist
-            newPlaylist = createNewPlaylist(spotifyApiService, user.getId(), SHUFFLED_PLAYLIST_PREFIX + playlistInfo.getName());
+            newPlaylist = createNewPlaylist(spotifyApiService, user.getId(), shuffledPlaylistName);
             if (newPlaylist == null){
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Creating new playlist failed");
             }
@@ -165,10 +169,35 @@ public class PlaylistController {
             // Get all playlists
             ArrayList<PlaylistSimplified> playlists = PlaylistSupport.getAllUserPlaylists(spotifyApiService);
             ArrayList<PlaylistSimplified> filteredPlaylists = new ArrayList<>();
+
+            // Get user name
+            GetCurrentUsersProfileRequest getCurrentUsersProfileRequest = spotifyApiService.getCurrentUsersProfile()
+                    .build();
+            User user;
+            try {
+                user = getCurrentUsersProfileRequest.execute();
+            } catch (UnauthorizedException e){
+                LOG.info(e.getMessage());
+                throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, e.getMessage());
+            } catch (IOException | SpotifyWebApiException | ParseException e) {
+                LOG.info(e.getMessage());
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
+            }
+
+            // Add liked tracks option as a playlist
+            PlaylistSimplified likedTracks = new PlaylistSimplified.Builder()
+                    .setName("Liked Tracks")
+                    .setOwner(user)
+                    .setId(LIKED_TRACKS_PLAYLIST_ID)
+                    .setImages(new Image.Builder().setUrl("https://4197r62cmrjs32n9dndpi2o1-wpengine.netdna-ssl.com/wp-content/uploads/2020/07/square-placeholder.jpg").build())
+                    .build();
+            // Add in likedTracks first
+            filteredPlaylists.add(likedTracks);
+
             // Remove shuffled playlists by name
-            for (int i=0; i<playlists.size(); i++){
-                if (!playlists.get(i).getName().startsWith(SHUFFLED_PLAYLIST_PREFIX)){
-                    filteredPlaylists.add(playlists.get(i));
+            for (PlaylistSimplified playlist : playlists) {
+                if (!playlist.getName().startsWith(SHUFFLED_PLAYLIST_PREFIX)) {
+                    filteredPlaylists.add(playlist);
                 }
             }
             return new GetPlaylistsResponse("Success", filteredPlaylists);
@@ -187,11 +216,25 @@ public class PlaylistController {
                 .setAccessToken(getPlaylistInfoRequest.getSpotifyAccessToken())
                 .build();
 
-//        GetPlaylistRequest getPlaylistRequest = spotifyApiService
-//                .getPlaylist(getPlaylistInfoRequest.getPlaylistId())
-//                .build();
+        // Processing for liked tracks
+        Playlist likedTracksPlaylist;
+        if (getPlaylistInfoRequest.getPlaylistId().equals(LIKED_TRACKS_PLAYLIST_ID)) {
+            try {
+                likedTracksPlaylist = new Playlist.Builder().setId(LIKED_TRACKS_PLAYLIST_ID)
+                        .setTracks(new Paging.Builder<PlaylistTrack>().setTotal(TrackSupport.getNumOfLikedTracks(spotifyApiService)).build()).build();
+                return new GetPlaylistResponse("Success", likedTracksPlaylist);
+            }
+            catch (UnauthorizedException e){
+                LOG.info(e.getMessage());
+                throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, e.getMessage());
+            } catch (IOException | SpotifyWebApiException | ParseException e) {
+                LOG.info(e.getMessage());
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
+            }
+        }
+
+        // Other playlist processing
         try {
-//            Playlist playlist = getPlaylistRequest.execute();
             return new GetPlaylistResponse("Success", PlaylistSupport.getPlaylistInfo(spotifyApiService, getPlaylistInfoRequest.getPlaylistId()));
         } catch (UnauthorizedException e){
             LOG.info(e.getMessage());
